@@ -22,7 +22,7 @@
 ##################
 
 #List of needed packages
-list_of_packages=c("dplyr","tidyr","readr","stringi","janitor","readxl","openxlsx","optparse","tools")
+list_of_packages=c("dplyr","readxl","readr","stringi","janitor","openxlsx","optparse","tools")
 
 #Based on the packages that are present, install ones that are required.
 new.packages <- list_of_packages[!(list_of_packages %in% installed.packages()[,"Package"])]
@@ -30,6 +30,8 @@ suppressMessages(if(length(new.packages)) install.packages(new.packages, repos =
 
 #Load libraries.
 suppressMessages(library(dplyr,verbose = F))
+suppressMessages(library(readxl,verbose = F))
+suppressMessages(library(readr,verbose = F))
 suppressMessages(library(stringi,verbose = F))
 suppressMessages(library(janitor,verbose = F))
 suppressMessages(library(openxlsx,verbose = F))
@@ -79,7 +81,7 @@ template_path=file_path_as_absolute(opt$template)
 
 
 #A start message for the user that the validation is underway.
-cat("The data files are being concatenated at this time.\n")
+cat("\nThe data files are being concatenated at this time.\n")
 
 
 ###############
@@ -111,85 +113,76 @@ dict_nodes=unique(df_dict$Node)
 #Establish the list
 workbook_list=list()
 
-cat("\n\nReading in the Metadata template workbook.\n")
+cat("\nReading in the Metadata template workbook.\n")
 
-for (file in file_list){
-  file_path=paste(directory_path,file,sep = "")
+file_count=0
+
+pb=txtProgressBar(min=0,max=length(file_list)*length(dict_nodes),style = 3)
+
+#make working directory for temporary file node deposition
+
+folder_dir=paste(dirname(directory_path),"/Cruncher_Temp",sep = "")
+
+dir.create(folder_dir,showWarnings = FALSE)
+
+#for each node
+for (node in dict_nodes){
+  #initiate a data frame
+  df_all=data.frame()
   
-  
-  ##############
-  #
-  # Read in each tab and apply to a data frame list
-  #
-  ##############
-  
-  # A bank of NA terms to make sure NAs are brought in correctly
-  NA_bank=c("NA","na","N/A","n/a")
-  
-  #Establish a blank add list
-  workbook_add=list()
-  
-  #create a list of all node pages with data
-  for (node in dict_nodes){
-    #read the sheet
-    df=readWorkbook(xlsxFile = file_path,sheet = node, na.strings = NA_bank)
-    #create an emptier version that removes the type and makes everything a character
-    df_empty_test=df%>%
+  #for each file
+  for (file in file_list){
+    file_count=file_count+1
+    setTxtProgressBar(pb,file_count)
+    #create a file path
+    file_path=paste(directory_path,file,sep = "")
+    #read in the file
+    df=read_excel(path = file_path, sheet = node)
+    #combine the data frames and obtain the unique output
+    df_all= rbind(df_all, df)
+    df_all= unique(df_all)
+    #remove any empty rows, which is obtained via removing the type column, removing empty rows and then adding back the type column.
+    df_all=df_all%>%
       select(-type)%>%
-      mutate(across(everything(), as.character))
-    #remove empty rows and columns
-    df_empty_test=remove_empty(df_empty_test,c("rows","cols"))
-    
-    #if there are at least one row in the resulting data frame, add it
-    if (dim(df_empty_test)[1]>0){
-      #if the only columns in the resulting data frame are only linking properties (node.node_id), do not add it.
-      if (any(!grepl(pattern = "\\.",x = colnames(df_empty_test)))){
-        #add the data frame to the workbook
-        workbook_add=append(x = workbook_add,values = list(df))
-        names(workbook_add)[length(workbook_add)]<-node
-      }else{
-        cat("\n\tWARNING: The following node, ", node,", did not contain any data except a linking value and type.\n" ,sep = "")
-      }
-    }
+      remove_empty(which = "rows")%>%
+      mutate(type=node)%>%
+      select(type, everything())
   }
-  
-  #add the workbook_add into the workbook_list
-  for (node in names(workbook_add)){
-    workbook_list[node][[1]]=rbind(workbook_list[node][[1]],workbook_add[node][[1]])
-    workbook_list[node][[1]]=unique(workbook_list[node][[1]])
-  }
-  
+  #write the node file out
+  write_tsv(file=paste(folder_dir,"/",node,".tsv",sep = ""),x = df_all, na="")
 }
 
+cat("\nThe workbook is being formed.\n")
 
-nodes_present=names(workbook_list)
-
-###############
-#
-# Write out
-#
-###############
-
-#Write out file
 
 wb=openxlsx::loadWorkbook(file = template_path)
 
-cat("\n\nWriting out the CatchERR file.\n")
-
-#progress bar
-pb=txtProgressBar(min=0,max=length(nodes_present),style = 3)
-x=0
-
-#write out each tab in the workbook
-for (node in nodes_present){
-  x=x+1
-  setTxtProgressBar(pb,x)
-  df=workbook_list[node][[1]]
-  openxlsx::deleteData(wb, sheet = node,rows = 1:(dim(df)[1]+1),cols=1:(dim(df)[2]+1),gridExpand = TRUE)
-  openxlsx::writeData(wb=wb, sheet=node, df)
-  openxlsx::saveWorkbook(wb = wb,file = paste(path,output_file,".xlsx",sep = ""), overwrite = T)
+#for each node
+for (node in dict_nodes){
+  file_path=paste(folder_dir,"/",node,".tsv",sep = "")
+  #read the sheet corresponding node file
+  df=read_tsv(file = file_path, col_types = "c")
+  #create an emptier version that removes the type and makes everything a character
+  df_empty_test=df%>%
+    select(-type)%>%
+    mutate(across(everything(), as.character))
+  #remove empty rows and columns
+  df_empty_test=remove_empty(df_empty_test,c("rows","cols"))
+  
+  #if there are at least one row in the resulting data frame, add it
+  if (dim(df_empty_test)[1]>0){
+    #if the only columns in the resulting data frame are only linking properties (node.node_id), do not add it.
+    if (any(!grepl(pattern = "\\.",x = colnames(df_empty_test)))){
+      #write the node out.
+      openxlsx::deleteData(wb, sheet = node,rows = 1:(dim(df)[1]+1),cols=1:(dim(df)[2]+1),gridExpand = TRUE)
+      openxlsx::writeData(wb=wb, sheet=node, df)
+      openxlsx::saveWorkbook(wb = wb,file = paste(path,output_file,".xlsx",sep = ""), overwrite = T)
+    }
+  }
 }
 
+#delete the temp folder and contents.
+unlink(x = folder_dir, recursive = TRUE)
 
 
 cat(paste("\n\nProcess Complete.\n\nThe output file can be found here: ",path,"\n\n",sep = "")) 
