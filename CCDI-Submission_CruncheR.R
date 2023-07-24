@@ -57,7 +57,7 @@ option_list = list(
               help="dataset template file, CCDI_Submission_Template.xlsx", metavar="character")
 )
 #create list of options and values for file input
-opt_parser = OptionParser(option_list=option_list, description = "\nCCDI-Submission_CruncheR v2.0.0")
+opt_parser = OptionParser(option_list=option_list, description = "\nCCDI-Submission_CruncheR v2.0.1")
 opt = parse_args(opt_parser)
 
 #If no options are presented, return --help, stop and print the following message.
@@ -136,17 +136,23 @@ for (node in dict_nodes){
     setTxtProgressBar(pb,file_count)
     #create a file path
     file_path=paste(directory_path,file,sep = "")
-    #read in the file
-    df=read_excel(path = file_path, sheet = node)
-    #combine the data frames and obtain the unique output
-    df_all= rbind(df_all, df)
-    df_all= unique(df_all)
-    #remove any empty rows, which is obtained via removing the type column, removing empty rows and then adding back the type column.
-    df_all=df_all%>%
-      select(-type)%>%
-      remove_empty(which = "rows")%>%
-      mutate(type=node)%>%
-      select(type, everything())
+    tryCatch({
+      #read in the file
+      df=read_excel(path = file_path, sheet = node, guess_max = 10000)
+      #combine the data frames and obtain the unique output
+      df_all= rbind(df_all, df)
+      df_all= unique(df_all)
+      #remove any empty rows, which is obtained via removing the type column, removing empty rows and then adding back the type column.
+      df_all=df_all%>%
+        select(-type)%>%
+        remove_empty(which = "rows")%>%
+        mutate(type=node)%>%
+        select(type, everything())
+    },error = function(e) {
+      # Catch the error if the tab doesn't exist
+      cat("Error:", e$message, "\n")
+      cat("Skipping for", file,":", node, "\n")
+    })
   }
   #write the node file out
   write_tsv(file=paste(folder_dir,"/",node,".tsv",sep = ""),x = df_all, na="")
