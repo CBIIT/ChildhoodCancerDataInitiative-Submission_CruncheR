@@ -10,7 +10,7 @@ Rscript --vanilla CCDI-Submission_CruncheR.R -h
 ```
 Usage: CCDI-Submission_CruncheR.R [options]
 
-CCDI-Submission_CruncheR v2.0.0
+CCDI-Submission_CruncheR v2.0.1
 
 Options:
 	-d CHARACTER, --directory=CHARACTER
