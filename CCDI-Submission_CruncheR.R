@@ -150,8 +150,8 @@ for (node in dict_nodes){
         select(type, everything())
     },error = function(e) {
       # Catch the error if the tab doesn't exist
-      cat("Error:", e$message, "\n")
-      cat("Skipping for", file,":", node, "\n")
+      cat("\nError:", e$message, "\n")
+      cat("\nSkipping for", file,":", node, "\n")
     })
   }
   #write the node file out
