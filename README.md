@@ -1,3 +1,8 @@
+> [!WARNING]
+> This repository has been archived and is no longer maintained.  
+> The code is provided for historical reference and may contain unpatched or unknown vulnerabilities.  
+> It should not be used in production systems.  
+
 # ChildhoodCancerDataInitiative-Submission_CruncheR
 This takes a directory of CCDI Metadata template files as input and creates a single CCDI output file.
 
